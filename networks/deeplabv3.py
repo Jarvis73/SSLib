@@ -16,19 +16,21 @@
 
 import torch.nn as nn
 
-from models.aspp import ASPP
-from models.resnet import resnet_builder
+from networks.aspp import ASPP
+from networks.resnet import resnet_builder
 
 
 class DeepLabV3(nn.Module):
     def __init__(self, backbone='resnet50',
+                 output_stride=16,
+                 multi_grid=(1, 2, 4),
                  num_classes=20,
                  pretrained=None,
                  freeze_bn=False,
                  norm_layer=None):
         super(DeepLabV3, self).__init__()
 
-        self.encoder = resnet_builder(backbone, pretrained, freeze_bn, norm_layer)
+        self.encoder = resnet_builder(backbone, output_stride, multi_grid, pretrained, freeze_bn, norm_layer)
 
         self.decoder = nn.Sequential(
             nn.Conv2d(2048, 256, kernel_size=1, bias=False),

@@ -60,7 +60,6 @@ class CityScapes(BaseDataset):
     ]
 
     label_colours = dict(zip(range(19), colors))
-    mean_rgb = [0, 0, 0]
 
     def __init__(self, opt, logger, split='train', augmentations=None, cache=False):
         super(CityScapes, self).__init__(opt)
@@ -72,9 +71,8 @@ class CityScapes(BaseDataset):
         self.split = split
         self.augmentations = augmentations
         self.n_classes = opt.n_class
-        self.img_size = (2048, 1024)
         self.files = {}
-        self.paired_files = {}
+        self.mean_rgb = opt.mean_rgb
 
         self.images_base = self.root / "leftImg8bit" / self.split
         self.annotations_base = self.root / "gtFine" / self.split

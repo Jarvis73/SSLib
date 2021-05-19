@@ -16,13 +16,14 @@
 
 from tqdm import tqdm
 import torch
+import torch.nn.functional as F
 from pathlib import Path
 from sacred import Experiment
 
 from config import settings, MapConfig, set_seed, get_rundir
 from utils.loggers import get_global_logger
 from utils.timer import Timer
-from core.trainer import Trainer
+from core.model import Model
 from core.metrics import IoUMetric
 from data_kits import CustomDatasetDataLoader
 
@@ -43,8 +44,8 @@ def train(_run, _config):
     datasets = CustomDatasetDataLoader(opt, logger)
     device = torch.device("cuda:0" if torch.cuda.is_available() else 'cpu')
 
-    # Create trainer
-    trainer = Trainer(opt, logger, _run, datasets, isTrain=True)
+    # Create model
+    model = Model(opt, logger, _run, datasets, isTrain=True)
     timer = Timer()
     running_metrics = IoUMetric(opt.n_class)
 
@@ -57,24 +58,24 @@ def train(_run, _config):
             labels = data_i['lab'].to(device)
 
             with timer.start():
-                trainer.train()
-                trainer.optimizer_zerograd()
-                loss_ce = trainer.step(images, labels)
+                model.train()
+                model.optimizer_zerograd()
+                loss_ce = model.step(images, labels)
 
-                tqdmm.set_description(f"[TRAIN] loss: {loss_ce:.4f} lr: {trainer.Opti.param_groups[0]['lr']:g}")
-                trainer.step_lr()
+                tqdmm.set_description(f"[TRAIN] loss: {loss_ce:.4f} lr: {model.Opti.param_groups[0]['lr']:g}")
+                model.step_lr()
 
         # 2. Validation
-        miou = trainer.validation(datasets, device, epoch, running_metrics)
-        print_str = f"Epoch [{epoch + 1}/{opt.epochs}] LR: {trainer.Opti.param_groups[0]['lr']:g} " \
-                    f"Mean IoU: {miou:.4f} ({trainer.best_iou:.4f}) Speed: {timer.cps:.2f}it/s"
+        miou = model.validation(datasets, device, epoch, running_metrics)
+        print_str = f"Epoch [{epoch + 1}/{opt.epochs}] LR: {model.Opti.param_groups[0]['lr']:g} " \
+                    f"Mean IoU: {miou:.4f} ({model.best_iou:.4f}) Speed: {timer.cps:.2f}it/s"
         logger.info(print_str)
 
-        trainer.step_lr(epoch_end=True)
+        model.step_lr(epoch_end=True)
         timer.reset()
 
-    trainer.snapshot(opt.epochs, trainer.best_iou, final=True)
-    return f"Mean IoU: {trainer.best_iou:.4f}"
+    model.snapshot(opt.epochs, model.best_iou, final=True)
+    return f"Mean IoU: {model.best_iou:.4f}"
 
 
 @ex.command
@@ -89,11 +90,11 @@ def test(_run, _config):
     datasets = CustomDatasetDataLoader(opt, logger, splits=('test',))
     device = torch.device("cuda:0" if torch.cuda.is_available() else 'cpu')
 
-    # Create trainer
-    trainer = Trainer(opt, logger, _run, isTrain=False)
+    # Create model
+    model = Model(opt, logger, _run, isTrain=False)
     timer = Timer()
     running_metrics = IoUMetric(opt.n_class)
-    trainer.eval(logger)
+    model.eval(logger)
     torch.cuda.empty_cache()
 
     # Validate
@@ -104,7 +105,7 @@ def test(_run, _config):
                 images = data_i["img"].to(device)
                 labels = data_i["lab"]
 
-                prob = trainer.model_DP(images)
+                prob = model.model_DP(images)
                 prob_up = F.interpolate(prob, size=images.size()[-2:], mode='bilinear', align_corners=True)
                 pred = prob_up.argmax(1).cpu().numpy()
             running_metrics.update(labels, pred)
@@ -113,15 +114,15 @@ def test(_run, _config):
     score, class_iou = running_metrics.get_scores()
     for k, v in score.items():
         logger.info(f'{k}: {v}')
-        _run.log_scalar(k, float(v), iters)
+        _run.log_scalar(k, float(v), 0)
     for k, v in class_iou.items():
         logger.info(f'class{k}: {v:.4f}')
-        _run.log_scalar(f"class{k}", float(v), iters)
+        _run.log_scalar(f"class{k}", float(v), 0)
 
-    print_str = f"Mean IoU: {miou:.4f} Speed: {timer.cps:.2f}it/s"
+    print_str = f"Mean IoU: {score['Mean IoU']:.4f} Speed: {timer.cps:.2f}it/s"
     logger.info(print_str)
 
-    return f"Mean IoU: {trainer.best_iou:.4f}"
+    return f"Mean IoU: {score['Mean IoU']:.4f}"
 
 
 if __name__ == "__main__":

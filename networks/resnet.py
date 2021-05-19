@@ -18,26 +18,16 @@ import torch
 import torch.nn as nn
 import torch.utils.model_zoo as model_zoo
 
-from models.sync_batchnorm.batchnorm import SynchronizedBatchNorm2d
+from networks.sync_batchnorm.batchnorm import SynchronizedBatchNorm2d
 
 affine_par = True
 model_urls = {
-    'resnet18': 'https://download.pytorch.org/models/resnet18-5c106cde.pth',
-    'resnet34': 'https://download.pytorch.org/models/resnet34-333f7ec4.pth',
     'resnet50': 'https://download.pytorch.org/models/resnet50-19c8e357.pth',
     'resnet101': 'https://download.pytorch.org/models/resnet101-5d3b4d8f.pth',
-    'resnet152': 'https://download.pytorch.org/models/resnet152-b121ed2d.pth',
-    'wide_resnet50_2': 'https://download.pytorch.org/models/wide_resnet50_2-95faca4d.pth',
-    'wide_resnet101_2': 'https://download.pytorch.org/models/wide_resnet101_2-32ee1156.pth',
 }
 __all__ = [
-    "resnet18",
-    "resnet34",
     "resnet50",
     "resnet101",
-    "resnet152",
-    "wide_resnet50_2",
-    "wide_resnet101_2",
     "resnet_builder"
 ]
 
@@ -91,19 +81,18 @@ class BasicBlock(nn.Module):
 class BottleNeck(nn.Module):
     expansion = 4
 
-    def __init__(self, inplanes, planes, stride=1, base_width=64, dilation=1,
+    def __init__(self, inplanes, planes, stride=1, dilation=1,
                  downsample=None, norm_layer=None):
         super(BottleNeck, self).__init__()
         if norm_layer is None:
             norm_layer = nn.BatchNorm2d
-        width = int(planes * (base_width / 64.))
 
-        self.conv1 = conv1x1(inplanes, width, stride)
-        self.bn1 = norm_layer(width, affine=affine_par)
-        self.conv2 = conv3x3(width, width, dilation=dilation)
-        self.bn2 = norm_layer(width, affine=affine_par)
-        self.conv3 = conv1x1(width, width * self.expansion)
-        self.bn3 = norm_layer(width * self.expansion, affine=affine_par)
+        self.conv1 = conv1x1(inplanes, planes, stride)
+        self.bn1 = norm_layer(planes, affine=affine_par)
+        self.conv2 = conv3x3(planes, planes, dilation=dilation)
+        self.bn2 = norm_layer(planes, affine=affine_par)
+        self.conv3 = conv1x1(planes, planes * self.expansion)
+        self.bn3 = norm_layer(planes * self.expansion, affine=affine_par)
         self.relu = nn.ReLU(inplace=True)
         self.downsample = downsample
 
@@ -132,27 +121,36 @@ class BottleNeck(nn.Module):
 
 class _ResNet(nn.Module):
     """ Resnet template used for semantic segmentation """
-    def __init__(self, block, layers, width_per_group=64, norm_layer=None):
+    def __init__(self, block, layers, output_stride=16, multi_grid=(1, 2, 4), norm_layer=None):
         super(_ResNet, self).__init__()
         self.inplanes = 64
         if norm_layer is None:
             norm_layer = nn.BatchNorm2d
         self._norm_layer = norm_layer
-        self.base_width = width_per_group
+
+        if output_stride == 16:
+            stride = [1, 2, 1, 1]
+            dilation = [1, 1, 2, 4]
+        elif output_stride == 8:
+            stride = [1, 2, 2, 1]
+            dilation = [1, 1, 1, 2]
+        else:
+            raise NotImplementedError
 
         self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=7, stride=2, padding=3, bias=False)
         self.bn1 = norm_layer(self.inplanes, affine=affine_par)
         self.relu = nn.ReLU(inplace=True)
         self.max_pool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1, ceil_mode=True)
 
-        self.layer1 = self._make_layer(block, 64, layers[0])
-        self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
-        self.layer3 = self._make_layer(block, 256, layers[2], stride=1, dilation=2)
-        self.layer4 = self._make_layer(block, 512, layers[3], stride=1, dilation=4)
+        self.layer1 = self._make_layer(block, 64, layers[0], stride=stride[0], dilation=dilation[0])
+        self.layer2 = self._make_layer(block, 128, layers[1], stride=stride[1], dilation=dilation[1])
+        self.layer3 = self._make_layer(block, 256, layers[2], stride=stride[2], dilation=dilation[2])
+        self.layer4 = self._make_layer(block, 512, layers[3], stride=stride[3], dilation=dilation[3],
+                                       multi_grid=multi_grid)
 
         self.init_weights()
 
-    def _make_layer(self, block, planes, blocks, stride=1, dilation=1):
+    def _make_layer(self, block, planes, blocks, stride=1, dilation=1, multi_grid=None):
         downsample = None
         norm_layer = self._norm_layer
         if stride != 1 or self.inplanes != planes * block.expansion or dilation == 2 or dilation == 4:
@@ -161,12 +159,15 @@ class _ResNet(nn.Module):
                 norm_layer(planes * block.expansion, affine=affine_par)
             )
 
-        layers = [block(self.inplanes, planes, stride=stride, base_width=self.base_width,
-                        dilation=dilation, downsample=downsample, norm_layer=norm_layer)]
+        if multi_grid is None:
+            multi_grid = (1,) * blocks
+
+        layers = [block(self.inplanes, planes, stride=stride,
+                        dilation=dilation * multi_grid[0], downsample=downsample, norm_layer=norm_layer)]
         self.inplanes = planes * block.expansion
         for i in range(1, blocks):
-            layers.append(block(self.inplanes, planes, stride=1, base_width=self.base_width,
-                                dilation=dilation, norm_layer=norm_layer))
+            layers.append(block(self.inplanes, planes, stride=1,
+                                dilation=dilation * multi_grid[i], norm_layer=norm_layer))
 
         return nn.Sequential(*layers)
 
@@ -221,58 +222,33 @@ def initialize(name, model, freeze_bn=False, pretrained=None):
     return model
 
 
-def resnet18(pretrained=None, freeze_bn=False, norm_layer=None):
-    model = _ResNet(BasicBlock, [2, 2, 2, 2], norm_layer=norm_layer)
-    model = initialize('resnet18', model, freeze_bn, pretrained)
-    return model
-
-
-def resnet34(pretrained=None, freeze_bn=False, norm_layer=None):
-    model = _ResNet(BasicBlock, [3, 4, 6, 3], norm_layer=norm_layer)
-    model = initialize('resnet34', model, freeze_bn, pretrained)
-    return model
-
-
-def resnet50(pretrained=None, freeze_bn=False, norm_layer=None):
-    model = _ResNet(BottleNeck, [3, 4, 6, 3], norm_layer=norm_layer)
+def resnet50(output_stride=16, multi_grid=(1, 2, 4), pretrained=None, freeze_bn=False, norm_layer=None):
+    model = _ResNet(BottleNeck, [3, 4, 6, 3], output_stride, multi_grid, norm_layer=norm_layer)
     model = initialize('resnet50', model, freeze_bn, pretrained)
     return model
 
 
-def resnet101(pretrained=None, freeze_bn=False, norm_layer=None):
-    model = _ResNet(BottleNeck, [3, 4, 23, 3], norm_layer=norm_layer)
+def resnet101(output_stride=16, multi_grid=(1, 2, 4), pretrained=None, freeze_bn=False, norm_layer=None):
+    model = _ResNet(BottleNeck, [3, 4, 23, 3], output_stride, multi_grid, norm_layer=norm_layer)
     model = initialize('resnet101', model, freeze_bn, pretrained)
     return model
 
 
-def resnet152(pretrained=None, freeze_bn=False, norm_layer=None):
-    model = _ResNet(BottleNeck, [3, 8, 36, 3], norm_layer=norm_layer)
-    model = initialize('resnet152', model, freeze_bn, pretrained)
-    return model
-
-
-def wide_resnet50_2(pretrained=None, freeze_bn=False, norm_layer=None):
-    model = _ResNet(BottleNeck, [3, 4, 6, 3], width_per_group=64 * 2, norm_layer=norm_layer)
-    model = initialize('wide_resnet50_2', model, freeze_bn, pretrained)
-    return model
-
-
-def wide_resnet101_2(pretrained=None, freeze_bn=False, norm_layer=None):
-    model = _ResNet(BottleNeck, [3, 4, 23, 3], width_per_group=64 * 2, norm_layer=norm_layer)
-    model = initialize('wide_resnet101_2', model, freeze_bn, pretrained)
-    return model
-
-
-def resnet_builder(name, pretrained=None, freeze_bn=False, norm_layer=None):
+def resnet_builder(name, output_stride=16, multi_grid=(1, 2, 4),
+                   pretrained=None, freeze_bn=False, norm_layer=None):
     """
     ResNet builder for semantic segmentation tasks.
 
-    Available models: resnet18, resnet34, resnet50, resnet101, resnet152, wide_resnet50_2, wide_resnet101_2
+    Available models: resnet50, resnet101
 
     Parameters
     ----------
     name: str
         model name
+    output_stride: int
+        output stride size, 8 or 16
+    multi_grid: tuple
+        multi-grid dilation in the layers of the last block
     pretrained: bool or str
         If False, no pretrained model will be loaded
         If None, imagenet pretrained model will be loaded (auto download)
@@ -288,25 +264,17 @@ def resnet_builder(name, pretrained=None, freeze_bn=False, norm_layer=None):
     A model instance
     """
     kwargs = {
+        "output_stride": output_stride,
+        "multi_grid": multi_grid,
         "pretrained": pretrained,
         "freeze_bn": freeze_bn,
         "norm_layer": norm_layer
     }
 
-    if name == 'resnet18':
-        model = resnet18(**kwargs)
-    elif name == 'resnet34':
-        model = resnet34(**kwargs)
-    elif name == 'resnet50':
+    if name == 'resnet50':
         model = resnet50(**kwargs)
     elif name == 'resnet101':
         model = resnet101(**kwargs)
-    elif name == 'resnet152':
-        model = resnet152(**kwargs)
-    elif name == 'wide_resnet50_2':
-        model = wide_resnet50_2(**kwargs)
-    elif name == 'wide_resnet101_2':
-        model = wide_resnet101_2(**kwargs)
     else:
         raise NotImplementedError(f"Model `{name}` is not implemented yet! "
                                   f"Select model from {list(model_urls.keys())}.")

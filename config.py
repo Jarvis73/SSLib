@@ -35,7 +35,7 @@ def add_observers(ex, config, fileStorage=False, MongoDB=True, db_name="DEFAULT"
         ex.observers.append(observer_file)
 
     if MongoDB:
-        observer_mongo = MongoObserver(url=f"localhost:{config['mongo_port']}", db_name=db_name)
+        observer_mongo = MongoObserver(url=f"{config['mongo_host']}:{config['mongo_port']}", db_name=db_name)
         ex.observers.append(observer_mongo)
 
 
@@ -50,6 +50,7 @@ def settings(ex):
         backbone = "resnet50"           # for deeplabv3, [resnet50|resnet101]
         name = "default"                # experiment name
         logdir = str(PROJECT_DIR / 'runs' / name)
+        mongo_host = "localhost"        # mongodb host
         mongo_port = 7000               # mongodb port
         seed = 1234                     # random seed
 
@@ -65,6 +66,8 @@ def settings(ex):
         ckpt = ''                       # resume model by a specific path
         pretrained = "auto"             # automatic load pretrained weights from PyTorch, [auto|none]
         if model_name == "deeplabv3":
+            output_stride = 16          # output stride size, 8 or 16
+            multi_grid = (1, 2, 4)      # multi-grid dilation in the layers of the last block
             freeze_bn = False           # freeze batch normalization layers
         elif model_name == "unet":
             init_c = 3                  # (unet) initial channels
@@ -77,6 +80,7 @@ def settings(ex):
         noaug = False                   # do not use data augmentation
         train_n = 0                     # If > 0, then #samples per epoch is set to <= train_n (for debug)
         val_n = 0                       # If > 0, then #samples is set to <= val_n (for debug)
+        mean_rgb = (0., 0., 0.)
 
         n_class = 19                    # number of classes
         num_workers = 6
@@ -116,6 +120,15 @@ def settings(ex):
     def config_hook(config, command_name, logger):
         add_observers(ex, config, db_name=ex.path)
         ex.logger = loggers.get_global_logger(name=ex.path)
+
+        # Type check
+        assert_list = ["mean_rgb", "multi_grid", "lr_boundaries"]
+        for x in assert_list:
+            if x not in config:
+                continue
+            if not isinstance(config[x], (list, tuple)):
+                raise TypeError(f"`{x}` must be a list or tuple, got {type(config[x])}")
+
         return config
 
 

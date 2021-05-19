@@ -21,10 +21,10 @@ import torch.nn.functional as F
 from pathlib import Path
 from tqdm import tqdm
 
-from models.deeplabv3 import DeepLabV3
-from models.unet import UNet2D
-from models.sync_batchnorm.batchnorm import SynchronizedBatchNorm2d
-from models.sync_batchnorm.replicate import DataParallelWithCallback, DataParallel
+from networks.deeplabv3 import DeepLabV3
+from networks.unet import UNet2D
+from networks.sync_batchnorm.batchnorm import SynchronizedBatchNorm2d
+from networks.sync_batchnorm.replicate import DataParallelWithCallback, DataParallel
 from utils.misc import find_snapshot
 from utils.loggers import C as CC
 from config import get_rundir
@@ -32,7 +32,7 @@ from core import solver
 from core import losses as loss_kits
 
 
-class Trainer(object):
+class Model(object):
     def __init__(self, opt, logger, run, datasets, isTrain=True):
         self.opt = opt
         self.logger = logger
@@ -64,7 +64,8 @@ class Trainer(object):
         else:
             pretrained = False
         if opt.model_name == "deeplabv3":
-            self.model = DeepLabV3(opt.backbone, self.n_class, pretrained, opt.freeze_bn, BatchNorm)
+            self.model = DeepLabV3(opt.backbone, opt.output_stride, opt.multi_grid,
+                                   self.n_class, pretrained, opt.freeze_bn, BatchNorm)
         elif opt.model_name == "unet":
             self.model = UNet2D(opt.init_c, opt.base_c, self.n_class, pretrained, BatchNorm)
         else:
