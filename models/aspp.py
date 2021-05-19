@@ -53,7 +53,7 @@ class ASPP(nn.Module):
             nn.ReLU())
 
     def forward(self, x):
-        global_feat = self.aspp_0(global_feat)
+        global_feat = self.aspp_0(x)
         global_feat = global_feat.expand(-1, -1, *x.shape[-2:])
         out = torch.cat((global_feat,
                          self.aspp_1(x),

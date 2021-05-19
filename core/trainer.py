@@ -33,13 +33,13 @@ from core import losses as loss_kits
 
 
 class Trainer(object):
-    def __init__(self, opt, logger, run, isTrain=True):
+    def __init__(self, opt, logger, run, datasets, isTrain=True):
         self.opt = opt
         self.logger = logger
         self.run = run
+        self.datasets = datasets
         self.isTrain = isTrain
 
-        self.iter = 0
         self.n_class = opt.n_class
         self.best_iou = -1
 
@@ -55,7 +55,7 @@ class Trainer(object):
         elif opt.bn == 'bn':
             BatchNorm = nn.BatchNorm2d
         else:
-            raise NotImplementedError('batch norm choice {} is not implemented'.format(opt.bn))
+            raise NotImplementedError(f'batch norm choice {opt.bn} is not implemented')
 
         if opt.ckpt_id >= 0 or opt.ckpt:
             pretrained = find_snapshot(opt, interactive=False)
@@ -69,15 +69,16 @@ class Trainer(object):
             self.model = UNet2D(opt.init_c, opt.base_c, self.n_class, pretrained, BatchNorm)
         else:
             raise NotImplementedError(f"`{opt.model_name}` is not implemented. [deeplabv3|unet]")
-        logger.info('The backbone is {}'.format(opt.model_name))
-        self.model_DP = self.init_device(self.model, gpu_id=0, whether_DP=True)
+        logger.info(f'The backbone is {self.model.__class__.__name__} ({opt.backbone})')
+        self.model_DP = self.init_device(self.model, whether_DP=True)
 
         if self.isTrain:
             # Define optimizer and scheduler
             self.optimizers = []
             self.schedulers = []
 
-            self.Opti, self.BaseSchedule = solver.get(self.model, opt, opt.train_iters)
+            max_iters = opt.epochs * (len(datasets.train_dataset) // opt.bs)
+            self.Opti, self.BaseSchedule = solver.get(self.model, opt, max_iters)
             self.optimizers.append(self.Opti)
             self.schedulers.append(self.BaseSchedule)
 
@@ -118,14 +119,14 @@ class Trainer(object):
         for optimizer in self.optimizers:
             optimizer.zero_grad()
 
-    def step_lr(self, finish_epoch=False):
+    def step_lr(self, epoch_end=False):
         """
         Update learning rate by the specified learning rate policy.
         For 'cosine' and 'poly' policies, the learning rate is updated by steps.
         For other policies, the learning rate is updated by epochs.
         """
-        if (not finish_epoch and self.do_step_lr) \
-                or (finish_epoch and not self.do_step_lr):  # forward per step or per epoch
+        if (not epoch_end and self.do_step_lr) \
+                or (epoch_end and not self.do_step_lr):  # forward per step or per epoch
             for sche in self.schedulers:
                 sche.step()
 
@@ -171,8 +172,8 @@ class Trainer(object):
         with torch.no_grad():
             tqdmm = tqdm(val_dataset, leave=False)
             for data_i in tqdmm:
-                images = data_i["images"].to(device)
-                labels = data_i["labels"]
+                images = data_i["img"].to(device)
+                labels = data_i["lab"].numpy()
 
                 prob = self.model_DP(images)
                 prob_up = F.interpolate(prob, size=images.size()[-2:], mode='bilinear', align_corners=True)
@@ -183,10 +184,10 @@ class Trainer(object):
         score, class_iou = running_metrics.get_scores()
         for k, v in score.items():
             self.logger.info(f'{k}: {v}')
-            self.run.log_scalar(k, float(v), iters)
+            self.run.log_scalar(k, float(v), epoch)
         for k, v in class_iou.items():
             self.logger.info(f'class{k}: {v:.4f}')
-            self.run.log_scalar(f"class{k}", float(v), iters)
+            self.run.log_scalar(f"class{k}", float(v), epoch)
 
         running_metrics.reset()
         torch.cuda.empty_cache()

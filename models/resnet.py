@@ -161,11 +161,11 @@ class _ResNet(nn.Module):
                 norm_layer(planes * block.expansion, affine=affine_par)
             )
 
-        layers = [block(self.inplanes, planes, stride, self.base_width, dilation,
-                        downsample=downsample, norm_layer=norm_layer)]
+        layers = [block(self.inplanes, planes, stride=stride, base_width=self.base_width,
+                        dilation=dilation, downsample=downsample, norm_layer=norm_layer)]
         self.inplanes = planes * block.expansion
         for i in range(1, blocks):
-            layers.append(block(self.inplanes, planes, self.base_width,
+            layers.append(block(self.inplanes, planes, stride=1, base_width=self.base_width,
                                 dilation=dilation, norm_layer=norm_layer))
 
         return nn.Sequential(*layers)

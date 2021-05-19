@@ -19,6 +19,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
+from sacred.config.custom_containers import ReadOnlyDict
 from sacred.observers import FileStorageObserver, MongoObserver
 from sacred.utils import apply_backspaces_and_linefeeds
 
@@ -53,11 +54,10 @@ def settings(ex):
         seed = 1234                     # random seed
 
         # training
-        lr = 0.0001
+        lr = 0.00025
         bs = 4
         bn = "bn"                       # normalization layer [sync_bn|bn]
-        epochs = 60                     # total training epochs
-        train_iters = 90000             # total training iters (affecting lr schedulers)
+        epochs = 120                    # total training epochs
         weight_decay = 0.0005           # weight decay coefficient
 
         #model
@@ -71,25 +71,21 @@ def settings(ex):
             base_c = 64                 # (unet) base channels
 
         #data
-        dataset = ''                    # select dataset [voc|coco|cityscapes|gta5|synthia]
-        data_rootpath = str(DATA_DIR / "VOCdevkit")     # set dataset rootpath [VOCdevkit|COCO|CityScape|GTA5|SYNTHIA]
+        dataset = 'cityscapes'          # select dataset [voc|coco|cityscapes|gta5|synthia]
         no_droplast = False
         noshuffle = False               # do not use shuffle
         noaug = False                   # do not use data augmentation
-
-        resize = 2200                   # resize long size
-        rcrop = [896, 512]              # rondom crop size
-        hflip = 0.5                     # random flip probility
+        train_n = 0                     # If > 0, then #samples per epoch is set to <= train_n (for debug)
+        val_n = 0                       # If > 0, then #samples is set to <= val_n (for debug)
 
         n_class = 19                    # number of classes
         num_workers = 6
 
-        #print
-        print_interval = 0              # print loss iter, 0 means using tqdm
-        val_interval = 0                # validate model iter, 0 means validating at the end of each epoch
+        resize = 2200                   # resize long size
+        rcrop = [1024, 512]             # rondom crop size
 
         # solver
-        lrp = "period_step"             # Learning rate policy [custom_step|period_step|plateau]
+        lrp = "poly"                    # Learning rate policy [custom_step|period_step|plateau|cosine|poly]
         if lrp == "custom_step":
             lr_boundaries = []          # (custom_step) Use the specified lr at the given boundaries
         if lrp == "period_step":
@@ -107,11 +103,11 @@ def settings(ex):
             power = 0.9                 # (poly)
 
         opti = "sgd"                    # Optimizer for training [sgd|adam]
-        if opt == "adam":
+        if opti == "adam":
             adam_beta1 = 0.9            # (adam) Parameter
             adam_beta2 = 0.999          # (adam) Parameter
             adam_epsilon = 1e-8         # (adam) Parameter
-        if opt == "sgd":
+        if opti == "sgd":
             sgd_momentum = 0.9          # (momentum) Parameter
             sgd_nesterov = False        # (momentum) Parameter
 
@@ -152,14 +148,14 @@ class MapConfig(ReadOnlyDict):
 
 
 def set_seed(seed):
-    torch.manual_seed(opt.seed)
-    torch.cuda.manual_seed(opt.seed)
-    np.random.seed(opt.seed)
-    random.seed(opt.seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    np.random.seed(seed)
+    random.seed(seed)
 
 
 def get_rundir(opt, _run):
     if _run._id is not None:
         return str(Path(opt.logdir) / str(_run._id))
     else:
-        str(Path(opt.logdir).parent / 'None')
+        return str(Path(opt.logdir).parent / 'None')

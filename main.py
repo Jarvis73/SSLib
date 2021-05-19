@@ -24,6 +24,7 @@ from utils.loggers import get_global_logger
 from utils.timer import Timer
 from core.trainer import Trainer
 from core.metrics import IoUMetric
+from data_kits import CustomDatasetDataLoader
 
 
 ex = Experiment("SSLib", base_dir=Path(__file__).parent, save_git_info=False)
@@ -39,24 +40,21 @@ def train(_run, _config):
     logger.info(f"RUNDIR: {get_rundir(opt, _run)}")
 
     # Create dataset
+    datasets = CustomDatasetDataLoader(opt, logger)
     device = torch.device("cuda:0" if torch.cuda.is_available() else 'cpu')
 
     # Create trainer
-    trainer = Trainer(opt, logger, _run, isTrain=True)
+    trainer = Trainer(opt, logger, _run, datasets, isTrain=True)
     timer = Timer()
     running_metrics = IoUMetric(opt.n_class)
 
-    trainer.iter = 0
     start_epoch = 0
     for epoch in range(start_epoch, opt.epochs):
         # 1. Training
         tqdmm = tqdm(datasets.train_loader, leave=False)
         for data_i in tqdmm:
-            images = data_i['images'].to(device)
-            labels = data_i['labels'].to(device)
-
-            trainer.iter += 1
-            i = trainer.iter
+            images = data_i['img'].to(device)
+            labels = data_i['lab'].to(device)
 
             with timer.start():
                 trainer.train()
@@ -72,7 +70,7 @@ def train(_run, _config):
                     f"Mean IoU: {miou:.4f} ({trainer.best_iou:.4f}) Speed: {timer.cps:.2f}it/s"
         logger.info(print_str)
 
-        trainer.step_lr(finish_epoch=True)
+        trainer.step_lr(epoch_end=True)
         timer.reset()
 
     trainer.snapshot(opt.epochs, trainer.best_iou, final=True)
@@ -88,6 +86,7 @@ def test(_run, _config):
     logger.info(f"RUNDIR: {get_rundir(opt, _run)}")
 
     # Create dataset
+    datasets = CustomDatasetDataLoader(opt, logger, splits=('test',))
     device = torch.device("cuda:0" if torch.cuda.is_available() else 'cpu')
 
     # Create trainer
@@ -99,11 +98,11 @@ def test(_run, _config):
 
     # Validate
     with torch.no_grad():
-        tqdmm = tqdm(datasets.val_loader)
+        tqdmm = tqdm(datasets.test_loader, leave=False)
         for data_i in tqdmm:
             with timer.start():
-                images = data_i["images"].to(device)
-                labels = data_i["labels"]
+                images = data_i["img"].to(device)
+                labels = data_i["lab"]
 
                 prob = trainer.model_DP(images)
                 prob_up = F.interpolate(prob, size=images.size()[-2:], mode='bilinear', align_corners=True)
