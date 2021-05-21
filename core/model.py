@@ -166,7 +166,6 @@ class Model(object):
 
     def validation(self, datasets, device, epoch, running_metrics):
         self.eval(self.logger)
-        torch.cuda.empty_cache()
         val_dataset = datasets.val_loader
 
         # Validate
@@ -191,7 +190,6 @@ class Model(object):
             self.run.log_scalar(f"class{k}", float(v), epoch)
 
         running_metrics.reset()
-        torch.cuda.empty_cache()
 
         # Take snapshot
         self.snapshot(epoch, score["Mean IoU"])

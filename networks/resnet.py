@@ -14,9 +14,7 @@
 #
 # =================================================================================
 
-import torch
 import torch.nn as nn
-import torch.utils.model_zoo as model_zoo
 
 from networks.sync_batchnorm.batchnorm import SynchronizedBatchNorm2d
 
@@ -194,48 +192,17 @@ class _ResNet(nn.Module):
                 m.bias.data.zero_()
 
 
-def freeze_bn_func(m):
-    if m.__class__.__name__.find('BatchNorm') != -1 or isinstance(m, SynchronizedBatchNorm2d) \
-            or isinstance(m, nn.BatchNorm2d):
-        m.weight.requires_grad = False
-        m.bias.requires_grad = False
-
-
-def initialize(name, model, freeze_bn=False, pretrained=None):
-    if freeze_bn:
-        model.apply(freeze_bn_func)
-
-    if pretrained is False:
-        pass
-    else:
-        if pretrained is None:
-            pretrain_dict = model_zoo.load_url(model_urls[name])
-        else:
-            pretrain_dict = torch.load(pretrained)['state_dict']
-        model_dict = {}
-        state_dict = model.state_dict()
-        for k, v in pretrain_dict.items():
-            if k in state_dict:
-                model_dict[k] = v
-        state_dict.update(model_dict)
-        model.load_state_dict(state_dict)
-    return model
-
-
-def resnet50(output_stride=16, multi_grid=(1, 2, 4), pretrained=None, freeze_bn=False, norm_layer=None):
+def resnet50(output_stride=16, multi_grid=(1, 2, 4), norm_layer=None):
     model = _ResNet(BottleNeck, [3, 4, 6, 3], output_stride, multi_grid, norm_layer=norm_layer)
-    model = initialize('resnet50', model, freeze_bn, pretrained)
     return model
 
 
-def resnet101(output_stride=16, multi_grid=(1, 2, 4), pretrained=None, freeze_bn=False, norm_layer=None):
+def resnet101(output_stride=16, multi_grid=(1, 2, 4), norm_layer=None):
     model = _ResNet(BottleNeck, [3, 4, 23, 3], output_stride, multi_grid, norm_layer=norm_layer)
-    model = initialize('resnet101', model, freeze_bn, pretrained)
     return model
 
 
-def resnet_builder(name, output_stride=16, multi_grid=(1, 2, 4),
-                   pretrained=None, freeze_bn=False, norm_layer=None):
+def resnet_builder(name, output_stride=16, multi_grid=(1, 2, 4), norm_layer=None):
     """
     ResNet builder for semantic segmentation tasks.
 
@@ -246,18 +213,12 @@ def resnet_builder(name, output_stride=16, multi_grid=(1, 2, 4),
     name: str
         model name
     output_stride: int
-        output stride size, 8 or 16
+        Output stride size. [8|16]
     multi_grid: tuple
-        multi-grid dilation in the layers of the last block
-    pretrained: bool or str
-        If False, no pretrained model will be loaded
-        If None, imagenet pretrained model will be loaded (auto download)
-        If a str, the specified pretrained model will be loaded
-    freeze_bn: bool
-        freeze batch norm layer or not
-    norm_layer: class
-        batch norm layer, either nn.BatchNorm2d or SynchronizedBatchNorm2d.
-        nn.BatchNorm2d will be used by default.
+        Multi-grid dilation in the layers of the last block
+    norm_layer:
+        Normalization layer class. [None|nn.BatchNorm2d|SynchronizedBatchNorm2d]
+        None means using default nn.BatchNorm2d
 
     Returns
     -------
@@ -266,8 +227,6 @@ def resnet_builder(name, output_stride=16, multi_grid=(1, 2, 4),
     kwargs = {
         "output_stride": output_stride,
         "multi_grid": multi_grid,
-        "pretrained": pretrained,
-        "freeze_bn": freeze_bn,
         "norm_layer": norm_layer
     }
 

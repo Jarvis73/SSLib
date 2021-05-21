@@ -95,7 +95,6 @@ def test(_run, _config):
     timer = Timer()
     running_metrics = IoUMetric(opt.n_class)
     model.eval(logger)
-    torch.cuda.empty_cache()
 
     # Validate
     with torch.no_grad():
