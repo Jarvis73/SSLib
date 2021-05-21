@@ -66,7 +66,7 @@ def train(_run, _config):
                 model.step_lr()
 
         # 2. Validation
-        miou = model.validation(datasets, device, epoch, running_metrics)
+        miou = model.validation(datasets, device, epoch + 1, running_metrics)
         print_str = f"Epoch [{epoch + 1}/{opt.epochs}] LR: {model.Opti.param_groups[0]['lr']:g} " \
                     f"Mean IoU: {miou:.4f} ({model.best_iou:.4f}) Speed: {timer.cps:.2f}it/s"
         logger.info(print_str)
