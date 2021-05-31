@@ -33,11 +33,10 @@ from core import losses as loss_kits
 
 
 class Model(object):
-    def __init__(self, opt, logger, run, datasets, isTrain=True):
+    def __init__(self, opt, logger, run, datasets=None, isTrain=True):
         self.opt = opt
         self.logger = logger
         self.run = run
-        self.datasets = datasets
         self.isTrain = isTrain
 
         self.n_class = opt.n_class
@@ -58,16 +57,16 @@ class Model(object):
             raise NotImplementedError(f'batch norm choice {opt.bn} is not implemented')
 
         if opt.ckpt_id >= 0 or opt.ckpt:
-            pretrained = find_snapshot(opt, interactive=False)
+            self.pretrained = find_snapshot(opt, interactive=False)
         elif opt.pretrained == "auto":
-            pretrained = None
+            self.pretrained = None
         else:
-            pretrained = False
+            self.pretrained = False
         if opt.model_name == "deeplabv3":
             self.model = DeepLabV3(opt.backbone, opt.output_stride, opt.multi_grid,
-                                   self.n_class, pretrained, opt.freeze_bn, BatchNorm)
+                                   self.n_class, self.pretrained, opt.freeze_bn, BatchNorm, self.logger)
         elif opt.model_name == "unet":
-            self.model = UNet2D(opt.init_c, opt.base_c, self.n_class, pretrained, BatchNorm)
+            self.model = UNet2D(opt.init_c, opt.base_c, self.n_class, self.pretrained, BatchNorm)
         else:
             raise NotImplementedError(f"`{opt.model_name}` is not implemented. [deeplabv3|unet]")
         logger.info(f'The backbone is {self.model.__class__.__name__} ({opt.backbone})')
@@ -87,7 +86,7 @@ class Model(object):
             self.do_step_lr = self.opt.lrp in ["cosine", "poly"]
 
     def step(self, x, y):
-        prob = self.model(x)
+        prob = self.model_DP(x)
         if tuple(prob.size()[-2:]) != tuple(x.size()[-2:]):
             prob = F.interpolate(prob, x.size()[-2:], mode='bilinear', align_corners=True)
         loss = self.celoss(inputs=prob, target=y)
@@ -134,7 +133,8 @@ class Model(object):
     def save(self, epoch, epoch_iou, save_path):
         state = {
             self.model.__class__.__name__: {
-                "model_state": self.model.state_dict()
+                # Save model.state_dict(), not model_DP.state_dict()
+                "state_dict": self.model.state_dict()
             },
             "epoch": epoch,
             "epoch_iou": epoch_iou,

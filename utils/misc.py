@@ -18,7 +18,7 @@ from pathlib import Path
 
 
 def search(exp_dir):
-    ckpt_names = ["bestckpt.pth", "ckpt.pth"]
+    ckpt_names = ["best.pth", "ckpt.pth"]
     for name in ckpt_names:
         ckpt_path = exp_dir / name
         if ckpt_path.exists():

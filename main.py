@@ -87,7 +87,8 @@ def test(_run, _config):
     logger.info(f"RUNDIR: {get_rundir(opt, _run)}")
 
     # Create dataset
-    datasets = CustomDatasetDataLoader(opt, logger, splits=('test',))
+    # Annotations of split 'test' are not available. Test is only performed on valset.
+    datasets = CustomDatasetDataLoader(opt, logger, splits=('val',))
     device = torch.device("cuda:0" if torch.cuda.is_available() else 'cpu')
 
     # Create model
@@ -98,16 +99,17 @@ def test(_run, _config):
 
     # Validate
     with torch.no_grad():
-        tqdmm = tqdm(datasets.test_loader, leave=False)
+        tqdmm = tqdm(datasets.val_loader, leave=False)
         for data_i in tqdmm:
             with timer.start():
                 images = data_i["img"].to(device)
-                labels = data_i["lab"]
+                labels = data_i["lab"].numpy()
 
                 prob = model.model_DP(images)
                 prob_up = F.interpolate(prob, size=images.size()[-2:], mode='bilinear', align_corners=True)
                 pred = prob_up.argmax(1).cpu().numpy()
             running_metrics.update(labels, pred)
+            score, class_iou = running_metrics.get_scores()
 
     # Record results
     score, class_iou = running_metrics.get_scores()

@@ -47,7 +47,7 @@ def settings(ex):
     def configurations():
         root = str(PROJECT_DIR)         # root path
         model_name = "deeplabv3"        # select model, [deeplabv3|unet]
-        backbone = "resnet50"           # for deeplabv3, [resnet50|resnet101]
+        backbone = "resnet101"          # for deeplabv3, [resnet50|resnet101]
         name = "default"                # experiment name
         logdir = str(PROJECT_DIR / 'runs' / name)
         mongo_host = "localhost"        # mongodb host
@@ -66,7 +66,7 @@ def settings(ex):
         ckpt = ''                       # resume model by a specific path
         pretrained = "auto"             # automatic load pretrained weights from PyTorch, [auto|none]
         if model_name == "deeplabv3":
-            output_stride = 16          # output stride size, 8 or 16
+            output_stride = 8           # output stride size [8|16]
             multi_grid = (1, 2, 4)      # multi-grid dilation in the layers of the last block
             freeze_bn = False           # freeze batch normalization layers
         elif model_name == "unet":

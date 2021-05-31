@@ -59,11 +59,13 @@ class DeepLabV3(nn.Module):
                  num_classes=20,
                  pretrained=None,
                  freeze_bn=False,
-                 norm_layer=None):
+                 norm_layer=None,
+                 logger=None):
         super(DeepLabV3, self).__init__()
         self.backbone = backbone
         self.pretrained = pretrained
         self.freeze_bn = freeze_bn
+        self.logger = logger
 
         self.encoder = resnet_builder(backbone, output_stride, multi_grid, norm_layer)
         self.decoder = nn.Sequential(
@@ -95,9 +97,11 @@ class DeepLabV3(nn.Module):
             if self.pretrained is None:
                 pretrain_dict = model_zoo.load_url(model_urls[self.backbone])
                 obj = self.encoder
+                load_path = model_urls[self.backbone]
             else:
                 pretrain_dict = torch.load(self.pretrained)[self.__class__.__name__]['state_dict']
                 obj = self
+                load_path = self.pretrained
             model_dict = {}
             state_dict = obj.state_dict()
             for k, v in pretrain_dict.items():
@@ -105,3 +109,6 @@ class DeepLabV3(nn.Module):
                     model_dict[k] = v
             state_dict.update(model_dict)
             obj.load_state_dict(state_dict)
+
+            if self.logger:
+                self.logger.info(f"Load checkpoint from {load_path}")

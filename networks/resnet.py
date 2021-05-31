@@ -119,17 +119,17 @@ class BottleNeck(nn.Module):
 
 class _ResNet(nn.Module):
     """ Resnet template used for semantic segmentation """
-    def __init__(self, block, layers, output_stride=16, multi_grid=(1, 2, 4), norm_layer=None):
+    def __init__(self, block, layers, output_stride=8, multi_grid=(1, 2, 4), norm_layer=None):
         super(_ResNet, self).__init__()
         self.inplanes = 64
         if norm_layer is None:
             norm_layer = nn.BatchNorm2d
         self._norm_layer = norm_layer
 
-        if output_stride == 16:
+        if output_stride == 8:
             stride = [1, 2, 1, 1]
             dilation = [1, 1, 2, 4]
-        elif output_stride == 8:
+        elif output_stride == 16:
             stride = [1, 2, 2, 1]
             dilation = [1, 1, 1, 2]
         else:
@@ -192,17 +192,17 @@ class _ResNet(nn.Module):
                 m.bias.data.zero_()
 
 
-def resnet50(output_stride=16, multi_grid=(1, 2, 4), norm_layer=None):
+def resnet50(output_stride=8, multi_grid=(1, 2, 4), norm_layer=None):
     model = _ResNet(BottleNeck, [3, 4, 6, 3], output_stride, multi_grid, norm_layer=norm_layer)
     return model
 
 
-def resnet101(output_stride=16, multi_grid=(1, 2, 4), norm_layer=None):
+def resnet101(output_stride=8, multi_grid=(1, 2, 4), norm_layer=None):
     model = _ResNet(BottleNeck, [3, 4, 23, 3], output_stride, multi_grid, norm_layer=norm_layer)
     return model
 
 
-def resnet_builder(name, output_stride=16, multi_grid=(1, 2, 4), norm_layer=None):
+def resnet_builder(name, output_stride=8, multi_grid=(1, 2, 4), norm_layer=None):
     """
     ResNet builder for semantic segmentation tasks.
 
