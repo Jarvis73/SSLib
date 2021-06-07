@@ -18,7 +18,7 @@ import torch.nn as nn
 
 from networks.sync_batchnorm.batchnorm import SynchronizedBatchNorm2d
 
-affine_par = True
+momemtum_par = 0.05
 model_urls = {
     'resnet50': 'https://download.pytorch.org/models/resnet50-19c8e357.pth',
     'resnet101': 'https://download.pytorch.org/models/resnet101-5d3b4d8f.pth',
@@ -50,10 +50,10 @@ class BasicBlock(nn.Module):
             norm_layer = nn.BatchNorm2d
         # Both self.conv1 and self.downsample layers downsample the input when stride != 1
         self.conv1 = conv3x3(inplanes, planes, stride)
-        self.bn1 = norm_layer(planes)
+        self.bn1 = norm_layer(planes, momentum=momemtum_par)
         self.relu = nn.ReLU(inplace=True)
         self.conv2 = conv3x3(planes, planes)
-        self.bn2 = norm_layer(planes)
+        self.bn2 = norm_layer(planes, momentum=momemtum_par)
         self.downsample = downsample
         self.stride = stride
 
@@ -86,11 +86,11 @@ class BottleNeck(nn.Module):
             norm_layer = nn.BatchNorm2d
 
         self.conv1 = conv1x1(inplanes, planes, stride)
-        self.bn1 = norm_layer(planes, affine=affine_par)
+        self.bn1 = norm_layer(planes, momentum=momemtum_par)
         self.conv2 = conv3x3(planes, planes, dilation=dilation)
-        self.bn2 = norm_layer(planes, affine=affine_par)
+        self.bn2 = norm_layer(planes, momentum=momemtum_par)
         self.conv3 = conv1x1(planes, planes * self.expansion)
-        self.bn3 = norm_layer(planes * self.expansion, affine=affine_par)
+        self.bn3 = norm_layer(planes * self.expansion, momentum=momemtum_par)
         self.relu = nn.ReLU(inplace=True)
         self.downsample = downsample
 
@@ -136,7 +136,7 @@ class _ResNet(nn.Module):
             raise NotImplementedError
 
         self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=7, stride=2, padding=3, bias=False)
-        self.bn1 = norm_layer(self.inplanes, affine=affine_par)
+        self.bn1 = norm_layer(self.inplanes, momentum=momemtum_par)
         self.relu = nn.ReLU(inplace=True)
         self.max_pool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1, ceil_mode=True)
 
@@ -154,7 +154,7 @@ class _ResNet(nn.Module):
         if stride != 1 or self.inplanes != planes * block.expansion or dilation == 2 or dilation == 4:
             downsample = nn.Sequential(
                 nn.Conv2d(self.inplanes, planes * block.expansion, kernel_size=1, stride=stride, bias=False),
-                norm_layer(planes * block.expansion, affine=affine_par)
+                norm_layer(planes * block.expansion, momentum=momemtum_par)
             )
 
         if multi_grid is None:

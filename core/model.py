@@ -20,6 +20,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from pathlib import Path
 from tqdm import tqdm
+from functools import partial
 
 from networks.deeplabv3 import DeepLabV3
 from networks.unet import UNet2D
@@ -30,6 +31,7 @@ from utils.loggers import C as CC
 from config import get_rundir
 from core import solver
 from core import losses as loss_kits
+from core.metrics import Accumulator
 
 
 class Model(object):
@@ -82,7 +84,7 @@ class Model(object):
             self.optimizers.append(self.Opti)
             self.schedulers.append(self.BaseSchedule)
 
-            self.celoss = loss_kits.cross_entropy2d
+            self.celoss = partial(loss_kits.cross_entropy2d, ignore_index=opt.ignore_index)
             self.do_step_lr = self.opt.lrp in ["cosine", "poly"]
 
     def step(self, x, y):
@@ -94,6 +96,31 @@ class Model(object):
         self.Opti.step()
 
         return loss.item()
+
+    def test_step(self, x):
+        _, _, h, w = x.shape
+        if self.opt.tta:
+            count = 0
+            scales = self.opt.ms
+            prob_sum = None
+            count = 0
+            for s in scales:
+                xs = F.interpolate(x, (int(h * s), int(w * s)), mode='bilinear', align_corners=True)
+                prob = self.model_DP(xs)
+                if self.opt.flip:
+                    borp = self.model_DP(torch.flip(xs, dims=[3]))  # prob -> borp
+                    prob = (prob + torch.flip(borp, dims=[3])) / 2
+                prob = F.interpolate(prob, (h, w), mode='bilinear', align_corners=True)
+                if prob_sum is None:
+                    prob_sum = prob
+                else:
+                    prob_sum = prob_sum + prob
+                count += 1
+            prob = prob_sum / count
+        else:
+            prob = self.model_DP(x)
+            prob = F.interpolate(prob, (h, w), mode='bilinear', align_corners=True)
+        return prob
 
     def init_device(self, net, whether_DP=False):
         device = torch.device("cuda:0" if torch.cuda.is_available() else 'cpu')
@@ -167,18 +194,26 @@ class Model(object):
     def validation(self, datasets, device, epoch, running_metrics):
         self.eval(self.logger)
         val_dataset = datasets.val_loader
+        acc = Accumulator(val_loss=0.)
 
         # Validate
         with torch.no_grad():
             tqdmm = tqdm(val_dataset, leave=False)
             for data_i in tqdmm:
                 images = data_i["img"].to(device)
-                labels = data_i["lab"].numpy()
+                labels = data_i["lab"].to(device)
+                labels_full = data_i["lab_full"].numpy()
 
                 prob = self.model_DP(images)
-                prob_up = F.interpolate(prob, size=images.size()[-2:], mode='bilinear', align_corners=True)
+                if tuple(prob.size()[-2:]) != tuple(labels.size()[-2:]):
+                    prob = F.interpolate(prob, labels.size()[-2:], mode='bilinear', align_corners=True)
+                loss = self.celoss(inputs=prob, target=labels)
+                acc.update(val_loss=loss)
+
+                prob_up = F.interpolate(prob, size=labels_full.shape[-2:], mode='bilinear', align_corners=True)
                 pred = prob_up.argmax(1).cpu().numpy()
-                running_metrics.update(labels, pred)
+                running_metrics.update(labels_full, pred)
+        self.run.log_scalar('val_loss', float(acc.mean('val_loss')), epoch)
 
         # Record results
         score, class_iou = running_metrics.get_scores()

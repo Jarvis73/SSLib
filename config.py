@@ -23,7 +23,7 @@ from sacred.config.custom_containers import ReadOnlyDict
 from sacred.observers import FileStorageObserver, MongoObserver
 from sacred.utils import apply_backspaces_and_linefeeds
 
-from utils import loggers
+from utils.loggers import get_global_logger
 
 PROJECT_DIR = Path(__file__).parent
 DATA_DIR = PROJECT_DIR / "datasets"
@@ -39,7 +39,11 @@ def add_observers(ex, config, fileStorage=False, MongoDB=True, db_name="DEFAULT"
         ex.observers.append(observer_mongo)
 
 
-def settings(ex):
+def assert_in_error(name, lst, value):
+    raise ValueError(f"`{name}` must be selected from [{'|'.join(lst)}], got '{value}'")
+
+
+def setup_config(ex):
     # Track outputs
     ex.captured_out_filter = apply_backspaces_and_linefeeds
 
@@ -74,18 +78,20 @@ def settings(ex):
             base_c = 64                 # (unet) base channels
 
         #data
-        dataset = 'cityscapes'          # select dataset [voc|coco|cityscapes|gta5|synthia]
+        dataset = 'cityscapes'          # select dataset [voc|cityscapes]
+        split = 'train'                 # voc dataset split [train|trainaug]
         no_droplast = False
         noshuffle = False               # do not use shuffle
         noaug = False                   # do not use data augmentation
         train_n = 0                     # If > 0, then #samples per epoch is set to <= train_n (for debug)
         val_n = 0                       # If > 0, then #samples is set to <= val_n (for debug)
-        mean_rgb = (0., 0., 0.)
+        ignore_index = 250              # ignore index of labels, used in loss functions
 
         n_class = 19                    # number of classes
         num_workers = 6
 
-        resize = 2200                   # resize long size
+        rng = (0.5, 1.5)                # resize scale range
+        rsize = 2200                    # resize long size
         rcrop = [1024, 512]             # rondom crop size
 
         # solver
@@ -115,11 +121,15 @@ def settings(ex):
             sgd_momentum = 0.9          # (momentum) Parameter
             sgd_nesterov = False        # (momentum) Parameter
 
+        # test
+        tta = False                     # test-time augmentation
+        ms = (0.75, 1., 1.25)           # (tta) multi-scale inputs
+        flip = True                     # (tta) flipped inputs
 
     @ex.config_hook
     def config_hook(config, command_name, logger):
         add_observers(ex, config, db_name=ex.path)
-        ex.logger = loggers.get_global_logger(name=ex.path)
+        ex.logger = get_global_logger(name=ex.path)
 
         # Type check
         assert_list = ["mean_rgb", "multi_grid", "lr_boundaries"]
@@ -128,6 +138,11 @@ def settings(ex):
                 continue
             if not isinstance(config[x], (list, tuple)):
                 raise TypeError(f"`{x}` must be a list or tuple, got {type(config[x])}")
+
+        # value check
+        assert_list = ['train', 'trainaug']
+        if config['split'] not in assert_list:
+            assert_in_error('split', assert_list, config['split'])
 
         return config
 
@@ -172,3 +187,11 @@ def get_rundir(opt, _run):
         return str(Path(opt.logdir) / str(_run._id))
     else:
         return str(Path(opt.logdir).parent / 'None')
+
+
+def setup_runner(ex, _run, _config):
+    opt = MapConfig(_config)    # Access configurations by attribute
+    set_seed(opt.seed)
+    logger = get_global_logger(name=ex.path)
+    logger.info(f"RUNDIR: {get_rundir(opt, _run)}")
+    return opt, logger

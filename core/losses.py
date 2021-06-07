@@ -17,7 +17,7 @@
 import torch.nn.functional as F
 
 
-def cross_entropy2d(inputs, target, weight=None, softmax_used=False, reduction='mean'):
+def cross_entropy2d(inputs, target, weight=None, softmax_used=False, reduction='mean', ignore_index=250):
     n, c, h, w = inputs.size()
     nt, ht, wt = target.size()
 
@@ -25,7 +25,7 @@ def cross_entropy2d(inputs, target, weight=None, softmax_used=False, reduction='
         raise ValueError('sizes of input and label are not consistent')
 
     if softmax_used:
-        loss = F.nll_loss(inputs, target, weight=weight, ignore_index=250, reduction=reduction)
+        loss = F.nll_loss(inputs, target, weight=weight, ignore_index=ignore_index, reduction=reduction)
     else:
-        loss = F.cross_entropy(inputs, target, weight=weight, ignore_index=250, reduction=reduction)
+        loss = F.cross_entropy(inputs, target, weight=weight, ignore_index=ignore_index, reduction=reduction)
     return loss

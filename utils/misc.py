@@ -27,22 +27,17 @@ def search(exp_dir):
 
 
 def try_possible_ckpt_names(base, exp_id, ckpt=None):
-    if exp_id >= 0:
+    if exp_id >= 0 and (base / str(exp_id)).exists():
         # Search running results from `logdir` directory (with specific name)
         ckpt_path = search(base / str(exp_id))
         if ckpt_path:
             return ckpt_path
 
-        # Search running results from `runs` directory (without specific name)
-        for exp_dir in base.parent.glob("*/[0-9]*"):
-            if exp_dir.is_dir() and int(exp_dir.name) == exp_id:
-                ckpt_path = search(exp_dir)
-                return ckpt_path
-
     # Use ckpt directly
-    ckpt_file = Path(ckpt)
-    if ckpt_file.exists():
-        return ckpt_file
+    if ckpt:
+        ckpt_file = Path(ckpt)
+        if ckpt_file.exists():
+            return ckpt_file
 
     return False
 

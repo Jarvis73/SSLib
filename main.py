@@ -16,32 +16,26 @@
 
 from tqdm import tqdm
 import torch
-import torch.nn.functional as F
 from pathlib import Path
 from sacred import Experiment
 
-from config import settings, MapConfig, set_seed, get_rundir
-from utils.loggers import get_global_logger
+from config import setup_config, setup_runner
 from utils.timer import Timer
 from core.model import Model
-from core.metrics import IoUMetric
+from core.metrics import Accumulator, IoUMetric
 from data_kits import CustomDatasetDataLoader
 
 
 ex = Experiment("SSLib", base_dir=Path(__file__).parent, save_git_info=False)
-settings(ex)
+setup_config(ex)
 
 
 @ex.command
 def train(_run, _config):
-    # Setup
-    opt = MapConfig(_config)
-    set_seed(opt.seed)
-    logger = get_global_logger(name=ex.path)
-    logger.info(f"RUNDIR: {get_rundir(opt, _run)}")
+    opt, logger = setup_runner(ex, _run, _config)
 
     # Create dataset
-    datasets = CustomDatasetDataLoader(opt, logger)
+    datasets = CustomDatasetDataLoader(opt, logger, splits=(opt.split, 'val'))
     device = torch.device("cuda:0" if torch.cuda.is_available() else 'cpu')
 
     # Create model
@@ -52,6 +46,7 @@ def train(_run, _config):
     start_epoch = 0
     for epoch in range(start_epoch, opt.epochs):
         # 1. Training
+        tr_acc = Accumulator(loss=0.)
         tqdmm = tqdm(datasets.train_loader, leave=False)
         for data_i in tqdmm:
             images = data_i['img'].to(device)
@@ -62,8 +57,10 @@ def train(_run, _config):
                 model.optimizer_zerograd()
                 loss_ce = model.step(images, labels)
 
+                tr_acc.update(loss=loss_ce)
                 tqdmm.set_description(f"[TRAIN] loss: {loss_ce:.4f} lr: {model.Opti.param_groups[0]['lr']:g}")
                 model.step_lr()
+        _run.log_scalar('loss', float(tr_acc.mean('loss')), epoch + 1)
 
         # 2. Validation
         miou = model.validation(datasets, device, epoch + 1, running_metrics)
@@ -80,11 +77,7 @@ def train(_run, _config):
 
 @ex.command
 def test(_run, _config):
-    # Setup
-    opt = MapConfig(_config)
-    set_seed(opt.seed)
-    logger = get_global_logger(name=ex.path)
-    logger.info(f"RUNDIR: {get_rundir(opt, _run)}")
+    opt, logger = setup_runner(ex, _run, _config)
 
     # Create dataset
     # Annotations of split 'test' are not available. Test is only performed on valset.
@@ -105,11 +98,9 @@ def test(_run, _config):
                 images = data_i["img"].to(device)
                 labels = data_i["lab"].numpy()
 
-                prob = model.model_DP(images)
-                prob_up = F.interpolate(prob, size=images.size()[-2:], mode='bilinear', align_corners=True)
-                pred = prob_up.argmax(1).cpu().numpy()
+                prob = model.test_step(images)
+                pred = prob.argmax(1).cpu().numpy()
             running_metrics.update(labels, pred)
-            score, class_iou = running_metrics.get_scores()
 
     # Record results
     score, class_iou = running_metrics.get_scores()

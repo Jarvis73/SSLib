@@ -60,6 +60,13 @@ class CityScapes(BaseDataset):
     ]
 
     label_colours = dict(zip(range(19), colors))
+    class_names = [
+        "road",     "sidewalk",         "building",     "wall",
+        "fence",        "pole",     "traffic_light",    "traffic_sign", "vegetation",
+        "terrain",      "sky",      "person",           "rider",        "car",
+        "truck",        "bus",      "train",            "motorcycle",   "bicycle",]
+
+    mean = [0., 0., 0.]
 
     def __init__(self, opt, logger, split='train', augmentations=None, cache=False):
         super(CityScapes, self).__init__(opt)
@@ -72,7 +79,6 @@ class CityScapes(BaseDataset):
         self.augmentations = augmentations
         self.n_classes = opt.n_class
         self.files = {}
-        self.mean_rgb = opt.mean_rgb
 
         self.images_base = self.root / "leftImg8bit" / self.split
         self.annotations_base = self.root / "gtFine" / self.split
@@ -81,10 +87,6 @@ class CityScapes(BaseDataset):
 
         # self.void_classes = [0, 1, 2, 3, 4, 5, 6, 9, 10, 14, 15, 16, 18, 29, 30, -1]
         self.valid_classes = [7, 8, 11, 12, 13, 17, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 31, 32, 33]
-        self.class_names = ["unlabelled",   "road",     "sidewalk",         "building",     "wall",
-                            "fence",        "pole",     "traffic_light",    "traffic_sign", "vegetation",
-                            "terrain",      "sky",      "person",           "rider",        "car",
-                            "truck",        "bus",      "train",            "motorcycle",   "bicycle",]
 
         self.ignore_index = 250
         self.class_map = dict(zip(self.valid_classes, range(self.n_classes)))  # origin --> label
@@ -100,7 +102,7 @@ class CityScapes(BaseDataset):
             return min(actual, self.opt.train_n)
         if self.split == 'val' and self.opt.val_n > 0:
             return min(actual, self.opt.val_n)
-        return len(self.files)
+        return actual
 
     def get_image(self, img_path):
         if self.cache and img_path in cached_data:
@@ -148,9 +150,9 @@ class CityScapes(BaseDataset):
             label_copy[mask == k] = v
         return label_copy
 
-    def transform(self, img, lab, lp=None, check=True):
+    def transform(self, img, lab):
 
-        img = (img.astype(np.float32) - self.mean_rgb) / 255.
+        img = (img.astype(np.float32) - self.mean) / 255.
         img = img.transpose(2, 0, 1)    # HWC -> CHW
 
         img = torch.from_numpy(img).float()

@@ -49,27 +49,8 @@ def find_dataset_by_name(name):
     return dataset
 
 
-def get_option_setter(dataset_name):
-    """Return the static method <modify_commandline_options> of the dataset class."""
-    dataset_class = find_dataset_by_name(dataset_name)
-    return dataset_class.modify_commandline_options
-
-
-def create_dataset(opt, logger):
-    """Create a dataset given the option.
-
-    This function wraps the class CustomDatasetDataLoader.
-        This is the main interface between this package and 'train.py'/'test.py'
-
-    Example:
-        >>> from data_kits import create_dataset
-        >>> dataset = create_dataset(opt)
-    """
-    return CustomDatasetDataLoader(opt, logger)
-
-
 def get_composed_augmentations(opt):
-    return Compose([RandomSized(opt.resize),
+    return Compose([RandomSized(opt.rng, opt.rsize),
                     RandomCrop(opt.rcrop),
                     RandomHorizontallyFlip(0.5)])
 
@@ -84,9 +65,10 @@ class CustomDatasetDataLoader(object):
         self.val_loader = None
         self.test_loader = None
 
-        if 'train' in splits:
+        if 'train' in splits or 'trainaug' in splits:
+            split = 'train' if 'train' in splits else 'trainaug'
             data_aug = None if opt.noaug else (aug_cls or get_composed_augmentations(opt))
-            self.train_dataset = ds_cls(opt, logger, augmentations=data_aug, split='train')
+            self.train_dataset = ds_cls(opt, logger, augmentations=data_aug, split=split)
             self.logger.info(f"Dataset {self.train_dataset.__class__.__name__} for training was created")
 
             self.train_loader = torch.utils.data.DataLoader(
@@ -104,7 +86,7 @@ class CustomDatasetDataLoader(object):
 
             self.val_loader = torch.utils.data.DataLoader(
                 self.val_dataset,
-                batch_size=opt.bs,
+                batch_size=1,   # employ test bs=1 for nonuniform image sizes
                 shuffle=False,
                 num_workers=int(opt.num_workers),
                 drop_last=False,

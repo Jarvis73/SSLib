@@ -20,6 +20,7 @@ import torch.utils.model_zoo as model_zoo
 
 from networks.aspp import ASPP
 from networks.resnet import resnet_builder, model_urls
+from networks.sync_batchnorm.batchnorm import SynchronizedBatchNorm2d
 
 
 def freeze_bn_func(m):

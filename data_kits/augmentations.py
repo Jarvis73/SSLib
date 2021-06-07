@@ -275,14 +275,16 @@ class RandomSizedCrop(object):
 
 
 class RandomSized(object):
-    def __init__(self, size):
+    def __init__(self, rng, size):
+        self.rng = rng
         self.size = size
 
     def __call__(self, img, mask):
         assert img.size == mask.size, f"{img.size} vs {mask.size}"
 
         prop = 1.0 * img.size[0] / img.size[1]
-        w = int(random.uniform(0.5, 1.5) * self.size)
+        size = self.size if self.size > 0 else img.size[0]
+        w = int(random.uniform(*self.rng) * size)
         h = int(w / prop)
 
         img, mask = img.resize((w, h), Image.BILINEAR), mask.resize((w, h), Image.NEAREST),
