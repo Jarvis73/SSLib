@@ -105,32 +105,24 @@ class VOC(BaseDataset):
 
         img = self.get_image(img_path)
         lab = self.get_label(lab_path)
-        lab_full = None
-        if self.split == 'val':
-            lab_full = lab.copy()
 
         if self.augmentations is not None:
             img, lab = self.augmentations(img, lab)
 
-        img, lab, lab_full = self.transform(img, lab, lab_full)
+        img, lab = self.transform(img, lab)
 
-        batch = {
+        return {
             "img": img,
             "lab": lab,
             "img_path": str(img_path)
         }
-        if lab_full is not None:
-            batch["lab_full"] = lab_full
-        return batch
 
-    def transform(self, img, lab, lab_full=None):
+    def transform(self, img, lab):
 
         img = (img.astype(np.float32) / 255 - self.mean) / self.std
         img = img.transpose(2, 0, 1)    # HWC -> CHW
 
         img = torch.from_numpy(img).float()
         lab = torch.from_numpy(lab).long()
-        if lab_full is not None:
-            lab_full = torch.from_numpy(lab_full)
 
-        return img, lab, lab_full
+        return img, lab

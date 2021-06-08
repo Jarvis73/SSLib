@@ -122,6 +122,7 @@ def setup_config(ex):
             sgd_nesterov = False        # (momentum) Parameter
 
         # test
+        test_bs = 1                     # test batch size. Don't change it, unless image sizes are the same.
         tta = False                     # test-time augmentation
         ms = (0.75, 1., 1.25)           # (tta) multi-scale inputs
         flip = True                     # (tta) flipped inputs

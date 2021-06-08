@@ -202,17 +202,16 @@ class Model(object):
             for data_i in tqdmm:
                 images = data_i["img"].to(device)
                 labels = data_i["lab"].to(device)
-                labels_full = data_i["lab_full"].numpy()
+                labels_np = data_i["lab"].numpy()
 
                 prob = self.model_DP(images)
                 if tuple(prob.size()[-2:]) != tuple(labels.size()[-2:]):
-                    prob = F.interpolate(prob, labels.size()[-2:], mode='bilinear', align_corners=True)
-                loss = self.celoss(inputs=prob, target=labels)
+                    prob_up = F.interpolate(prob, labels.size()[-2:], mode='bilinear', align_corners=True)
+                loss = self.celoss(inputs=prob_up, target=labels)
                 acc.update(val_loss=loss)
 
-                prob_up = F.interpolate(prob, size=labels_full.shape[-2:], mode='bilinear', align_corners=True)
                 pred = prob_up.argmax(1).cpu().numpy()
-                running_metrics.update(labels_full, pred)
+                running_metrics.update(labels_np, pred)
         self.run.log_scalar('val_loss', float(acc.mean('val_loss')), epoch)
 
         # Record results

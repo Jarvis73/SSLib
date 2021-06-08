@@ -86,7 +86,7 @@ class CustomDatasetDataLoader(object):
 
             self.val_loader = torch.utils.data.DataLoader(
                 self.val_dataset,
-                batch_size=1,   # employ test bs=1 for nonuniform image sizes
+                batch_size=opt.test_bs,
                 shuffle=False,
                 num_workers=int(opt.num_workers),
                 drop_last=False,
@@ -99,7 +99,7 @@ class CustomDatasetDataLoader(object):
 
             self.test_loader = torch.utils.data.DataLoader(
                 self.test_dataset,
-                batch_size=opt.bs,
+                batch_size=opt.test_bs,
                 shuffle=False,
                 num_workers=int(opt.num_workers),
                 drop_last=False,
