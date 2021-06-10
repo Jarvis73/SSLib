@@ -19,6 +19,7 @@ from pathlib import Path
 
 import numpy as np
 import torch
+from sacred import Experiment
 from sacred.config.custom_containers import ReadOnlyDict
 from sacred.observers import FileStorageObserver, MongoObserver
 from sacred.utils import apply_backspaces_and_linefeeds
@@ -43,7 +44,7 @@ def assert_in_error(name, lst, value):
     raise ValueError(f"`{name}` must be selected from [{'|'.join(lst)}], got '{value}'")
 
 
-def setup_config(ex):
+def setup_config(ex: Experiment):
     # Track outputs
     ex.captured_out_filter = apply_backspaces_and_linefeeds
 
@@ -126,6 +127,18 @@ def setup_config(ex):
         tta = False                     # test-time augmentation
         ms = (0.75, 1., 1.25)           # (tta) multi-scale inputs
         flip = True                     # (tta) flipped inputs
+
+    # PASCAL VOC named_config. If sepecify `with voc` in commandline,
+    # configs in this function will overlap the those in configurations().
+    @ex.named_config
+    def voc():
+        dataset = 'voc'
+        n_class = 21
+        ignore_index = 255
+        rng = (0.5, 2.0)
+        rsize = 0
+        rcrop = [513, 513]
+
 
     @ex.config_hook
     def config_hook(config, command_name, logger):
